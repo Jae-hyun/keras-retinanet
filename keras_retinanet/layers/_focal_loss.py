@@ -67,7 +67,7 @@ class FocalLoss(keras.layers.Layer):
 		# compute alpha as (1 - alpha) for background and alpha for foreground
 		foreground_alpha = keras.backend.ones_like(labels) * self.alpha
 		background_alpha = 1.0 - foreground_alpha
-		alpha            = keras_retinanet.backend.where(keras.backend.equal(labels, 0), background_alpha, foreground_alpha)
+		alpha            = keras_retinanet.backend.where(keras.backend.equal(labels, -1), background_alpha, foreground_alpha)
 
 		# select classification scores for labeled anchors
 		indices          = keras.backend.expand_dims(keras_retinanet.backend.range(keras.backend.shape(labels)[0]), axis=1)
