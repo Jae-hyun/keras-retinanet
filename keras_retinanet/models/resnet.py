@@ -5,7 +5,7 @@ import keras_retinanet.layers
 
 import math
 
-def classification_subnet(num_classes=21, num_anchors=9, feature_size=256, prob_pi=0.01):
+def classification_subnet(num_classes=20, num_anchors=9, feature_size=256, prob_pi=0.01):
 	options = {
 		'kernel_initializer': keras.initializers.normal(mean=0.0, stddev=0.01, seed=None),
 		'bias_initializer': keras.initializers.zeros()
@@ -25,14 +25,15 @@ def classification_subnet(num_classes=21, num_anchors=9, feature_size=256, prob_
 			)
 		)
 
-	layers.append(keras.layers.Conv2D(
-		filters=num_classes * num_anchors,
-		kernel_size=(3, 3),
-		strides=1,
-		padding='same',
-		name='pyramid_classification',
-		kernel_initializer=keras.initializers.zeros(),
-		bias_initializer=keras.initializers.constant(-math.log((1 - prob_pi) / prob_pi)),
+	layers.append(
+		keras.layers.Conv2D(
+			filters=num_classes * num_anchors,
+			kernel_size=(3, 3),
+			strides=1,
+			padding='same',
+			name='pyramid_classification',
+			kernel_initializer=keras.initializers.zeros(),
+			bias_initializer=keras.initializers.constant(-math.log((1 - prob_pi) / prob_pi)),
 		)
 	)
 
@@ -78,7 +79,7 @@ def compute_pyramid_features(res3, res4, res5, feature_size=256):
 
 	return P3, P4, P5, P6, P7
 
-def RetinaNet(inputs, backbone, num_classes=21, feature_size=256, *args, **kwargs):
+def RetinaNet(inputs, backbone, num_classes=20, feature_size=256, *args, **kwargs):
 	image, im_info, gt_boxes = inputs
 
 	# TODO: Parametrize this
@@ -91,9 +92,9 @@ def RetinaNet(inputs, backbone, num_classes=21, feature_size=256, *args, **kwarg
 	sizes            = [32, 64, 128, 256, 512]
 
 	# TODO: Remove this ... this skips the first pyramid level
-	pyramid_features = pyramid_features[1:]
-	strides          = [16, 32, 64, 128]
-	sizes            = [64, 128, 256, 512]
+	#pyramid_features = pyramid_features[1:]
+	#strides          = [16, 32, 64, 128]
+	#sizes            = [64, 128, 256, 512]
 
 	# construct classification and regression subnets
 	classification_layers = classification_subnet(num_classes=num_classes, num_anchors=num_anchors, feature_size=feature_size)
@@ -102,6 +103,7 @@ def RetinaNet(inputs, backbone, num_classes=21, feature_size=256, *args, **kwarg
 	# for all pyramid levels, run classification and regression branch and compute anchors
 	classification    = None
 	labels            = None
+	class_targets     = None
 	regression        = None
 	regression_target = None
 	anchors           = None
@@ -112,14 +114,17 @@ def RetinaNet(inputs, backbone, num_classes=21, feature_size=256, *args, **kwarg
 			cls = l(cls)
 
 		# compute labels and bbox_reg_targets
-		lb, _, a = keras_retinanet.layers.AnchorTarget(
+		lb, cls_target, _, a = keras_retinanet.layers.AnchorTarget(
 			features_shape=keras.backend.int_shape(cls)[1:3],
 			stride=stride,
 			anchor_size=size,
+			num_anchors=num_anchors,
+			num_classes=num_classes,
 			name='boxes_{}'.format(i)
 		)([im_info, gt_boxes])
 		anchors           = a if anchors == None else keras.layers.Concatenate(axis=1)([anchors, a])
 		labels            = lb if labels == None else keras.layers.Concatenate(axis=1)([labels, lb])
+		class_targets     = cls_target if class_targets == None else keras.layers.Concatenate(axis=1)([class_targets, cls_target])
 		#regression_target = r if regression_target == None else keras.layers.Concatenate(axis=1)([regression_target, r])
 
 		cls            = keras.layers.Reshape((-1, num_classes), name='classification_{}'.format(i))(cls)
@@ -134,10 +139,10 @@ def RetinaNet(inputs, backbone, num_classes=21, feature_size=256, *args, **kwarg
 		#regression = reg if regression == None else keras.layers.Concatenate(axis=1)([regression, reg])
 
 	# compute classification and regression losses
-	classification = keras.layers.Activation('softmax', name='classification_softmax')(classification)
-	cls_loss = keras_retinanet.layers.FocalLoss(num_classes=num_classes)([classification, labels])
+	classification = keras.layers.Activation('sigmoid', name='classification_sigmoid')(classification)
+	cls_loss = keras_retinanet.layers.FocalLoss(num_classes=num_classes)([classification, class_targets, labels])
 
-	return keras.models.Model(inputs=inputs, outputs=[classification, labels, cls_loss, anchors], *args, **kwargs)
+	return keras.models.Model(inputs=inputs, outputs=[classification, labels, class_targets, cls_loss, anchors], *args, **kwargs)
 
 def ResNet50RetinaNet(inputs, *args, **kwargs):
 	image, _, _ = inputs

@@ -5,15 +5,15 @@ import keras_retinanet.backend
 As described in https://arxiv.org/abs/1708.02002
 """
 class FocalLoss(keras.layers.Layer):
-	def __init__(self, num_classes=21, alpha=0.75, gamma=2.0, *args, **kwargs):
+	def __init__(self, num_classes=20, alpha=0.25, gamma=2.0, *args, **kwargs):
 		self.num_classes = num_classes
-		self.alpha = alpha
-		self.gamma = gamma
+		self.alpha       = alpha
+		self.gamma       = gamma
 
 		super(FocalLoss, self).__init__(*args, **kwargs)
 
-	def classification_loss(self, focal_weight, classification, labels):
-		cls_loss = focal_weight * keras.backend.sparse_categorical_crossentropy(labels, classification)
+	def classification_loss(self, focal_weight, classification, class_targets, labels):
+		cls_loss = focal_weight * keras.backend.categorical_crossentropy(class_targets, classification)
 		cls_loss = keras.backend.sum(cls_loss)
 
 		# compute the number of anchors assigned to a ground-truth box
@@ -48,18 +48,20 @@ class FocalLoss(keras.layers.Layer):
 	#	return reg_loss
 
 	def call(self, inputs):
-		classification, labels = inputs
+		classification, class_targets, labels = inputs
 
 		classification    = keras.backend.reshape(classification, (-1, self.num_classes))
+		class_targets     = keras.backend.reshape(class_targets, (-1, self.num_classes))
 		labels            = keras.backend.reshape(labels, (-1,))
 		#regression        = keras.backend.reshape(regression, (-1, 4))
 		#regression_target = keras.backend.reshape(labels, (-1, 4))
 
-		indices = keras_retinanet.backend.where(keras.backend.not_equal(labels, -1))
+		indices = keras_retinanet.backend.where(keras.backend.greater_equal(labels, -1))
 
 		#regression        = keras_retinanet.backend.gather_nd(regression, indices)
 		#regression_target = keras_retinanet.backend.gather_nd(regression_target, indices)
 		classification    = keras_retinanet.backend.gather_nd(classification, indices)
+		class_targets     = keras_retinanet.backend.gather_nd(class_targets, indices)
 		labels            = keras_retinanet.backend.gather_nd(labels, indices)
 
 		# compute alpha as (1 - alpha) for background and alpha for foreground
@@ -73,7 +75,7 @@ class FocalLoss(keras.layers.Layer):
 		probabilities    = keras_retinanet.backend.gather_nd(classification, labeled_indices)
 		focal_weight     = alpha * (1.0 - probabilities) ** self.gamma
 
-		cls_loss = self.classification_loss(focal_weight, classification, labels)
+		cls_loss = self.classification_loss(focal_weight, classification, class_targets, labels)
 		self.add_loss(cls_loss)
 
 		#reg_loss = self.regression_loss(focal_weight, labels, regression, regression_target)
