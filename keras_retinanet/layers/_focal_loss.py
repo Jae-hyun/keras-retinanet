@@ -14,17 +14,18 @@ class FocalLoss(keras.layers.Layer):
 
 	def classification_loss(self, focal_weight, classification, labels):
 		cls_loss = focal_weight * keras.backend.sparse_categorical_crossentropy(labels, classification)
-		cls_loss = keras.backend.sum(cls_loss)
+		#cls_loss = keras.backend.sum(cls_loss)
+		cls_loss = keras.backend.mean(cls_loss)
 
 		# compute the number of anchors assigned to a ground-truth box
-		ones           = keras.backend.ones_like(labels)
-		zeros          = keras.backend.zeros_like(labels)
-		assigned_boxes = keras_retinanet.backend.where(keras.backend.greater(labels, 0), ones, zeros)
+		#ones           = keras.backend.ones_like(labels)
+		#zeros          = keras.backend.zeros_like(labels)
+		#assigned_boxes = keras_retinanet.backend.where(keras.backend.greater(labels, 0), ones, zeros)
 
 		# "The total focal loss of an image is computed as the sum
 		# of the focal loss over all ~100k anchors, normalized by the
 		# number of anchors assigned to a ground-truth box."
-		cls_loss = cls_loss / (keras.backend.sum(assigned_boxes) + keras.backend.epsilon())
+		#cls_loss = cls_loss / (keras.backend.sum(assigned_boxes) + keras.backend.epsilon())
 		return cls_loss
 
 	#def regression_loss(self, focal_weight, labels, regression, regression_target):
